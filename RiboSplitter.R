@@ -103,7 +103,7 @@ gene_info= function (ensembl_id_version) {
   return(gg)
 }
 
-# function that takes details file from spladder and puts one exon per row with genomic positions
+# function that takes details file and puts one exon per row with genomic positions
 exon_positions= function (details_df) {
   pos1= details_df %>%
     ungroup() %>%
@@ -228,7 +228,7 @@ first_exon = function (exon_positions) {
   return (exonframes2)
 }
 
-# beta binomial model adjusted p value. input samples with isoform counts for 2 groups
+# beta binomial model with adjusted p value. input samples with isoform counts for 2 groups
 betabinomial= function (samples_df) {
   t= droplevels(samples_df)
   p= data.frame (event_id=character(), beta=numeric() )
@@ -268,7 +268,7 @@ event_level= function (samples_df, details_df) {
 }
 
 # function to do exact matching of first exon amino acid sequence with known proteins of the gene
-# input is data from first_exon function above and details file to add gene names
+# input is data from first_exon function above and details file
 peptide_match = function (e1frames, details_df) {
   library (biomaRt)
   ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
@@ -435,117 +435,7 @@ protein_changes= function (translated_isoforms) {
   return (df2)
 }
 
-# function to get transcript as reference for splicing event. it will be either canonical or the one that
-# matches to more exons of isoform 1 (shared exons )
-get_tx= function (events_df, iso1_df ) {
-  library (biomaRt)
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
-  df= dplyr::select(events_df, gene_name, gene_id, event_id)
-  genes= unique (df$gene_name)
-  tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', genes, 
-             attributes =c('ensembl_gene_id_version' , 'ensembl_transcript_id','transcript_start','transcript_end', 
-                           'transcription_start_site', 'transcript_is_canonical', 'transcript_length',
-                           'transcript_count', 'transcript_biotype') )
-  tx_canon= filter (tx, transcript_is_canonical==1) %>%
-    dplyr::select(ensembl_gene_id_version,ensembl_transcript_id, transcript_is_canonical) %>%
-    dplyr::rename (gene_name=ensembl_gene_id_version, tx_id=ensembl_transcript_id, canonical=transcript_is_canonical)
-  txlist= unique (tx$ensembl_transcript_id)
-  exons= getBM(mart =ensembl, filters='ensembl_transcript_id', txlist,
-               attributes =c('ensembl_transcript_id','ensembl_gene_id_version','chromosome_name', 'strand',
-                             'ensembl_exon_id','exon_chrom_start','exon_chrom_end', 'is_constitutive')) %>%
-    dplyr::select(ensembl_gene_id_version,ensembl_transcript_id,exon_chrom_start,exon_chrom_end,
-                  chromosome_name,strand) %>%
-    distinct () %>%
-    dplyr::rename (gene_name=ensembl_gene_id_version, tx_id=ensembl_transcript_id, 
-                   start=exon_chrom_start, end=exon_chrom_end ) %>%
-    mutate (start=as.numeric(start), end=as.numeric(end))
-  ex= iso1_df %>%
-    ungroup () %>%
-    dplyr::select (gene_name,event_id, start,end, exons) %>%
-    filter (exons !='e2') %>%
-    mutate (start=as.numeric(start), end=as.numeric(end), exons=ifelse(exons=='e4','e3',exons)) %>%
-    distinct() %>%
-    inner_join(exons, by=c('gene_name','start','end'),relationship="many-to-many") %>%
-    dplyr::select (-c(chromosome_name,strand))
-  tx2= ex %>%
-    group_by(gene_name,event_id,tx_id,exons) %>%
-    summarise (n=n()) %>%
-    pivot_wider(names_from ='exons', values_from ='n') %>%
-    mutate (n=sum(e1,e3,na.rm =T)) %>%
-    left_join(tx_canon, by=c('gene_name','tx_id')) %>%
-    ungroup () %>%
-    arrange (gene_name, event_id, desc(n),desc(canonical)) %>%
-    group_by(gene_name,event_id) %>%
-    slice_head (n=1) %>%
-    dplyr::select(-c(e1,e3))
-  notx= dplyr::select(iso1_df, gene_name, event_id) %>%
-    distinct () %>%
-    anti_join(tx2,by='event_id') %>%
-    left_join(tx_canon,by='gene_name') %>%
-    mutate (n=0)
-  tx3= rbind (tx2,notx)
-  ref= exons %>%
-    inner_join(tx3,by=c('gene_name','tx_id'),relationship="many-to-many") %>%
-    mutate (canonical=replace_na(canonical,0), 
-            strand= ifelse(strand==1,'+','-'), chrm=paste0('chr',chromosome_name),
-            id=ifelse (canonical==1,'Canonical',tx_id)) %>%
-    dplyr::select (gene_name,id, event_id, chrm, start, end, strand)
-  t= events_df %>%
-    ungroup () %>%
-    dplyr::select(gene_name, gene_id) %>%
-    distinct ()
-  ref2= ref %>%
-    left_join(t, by='gene_name') %>%
-    arrange (gene_id, start)
-  remove (ensembl)
-  detach("package:biomaRt", unload = TRUE)
-  return (ref2)
-}
-
-splice_figure_ref_TX= function (events_df , positions_df) {
-  pos= positions_df %>%
-    filter (event_id %in% events_df$event_id) %>%
-    arrange (gene_name, event_id, exons, start) %>%
-    mutate (type= str_extract(event_id,'[^.]+')) %>%
-    dplyr::select (gene_name, event_id, type, chrm, strand, exons, start, end) 
-  iso2= pos %>%
-    mutate (incl= ifelse (type=='mutex_exons' & ((strand=='+' & exons !='e2') | (strand=='-' & exons !='e3')),1,0),
-            iso='Isoform 2') %>%
-    filter (type !='mutex_exons' | incl==1) %>%
-    dplyr::select (-incl)
-  iso1= pos %>%
-    mutate (incl=ifelse (type=='mutex_exons' & ((strand=='+' & exons !='e3') | (strand=='-' & exons !='e2')),1,0), 
-            iso='Isoform 1') %>%
-    filter ((type !='mutex_exons' & exons !='e2') | incl==1) %>%
-    dplyr::select (-incl)
-  ours= rbind(iso1, iso2) %>%
-    mutate (id= ifelse (iso=='Isoform 1', paste0(event_id,'_iso1'), paste0(event_id,'_iso2')),
-            start=as.numeric(start), end=as.numeric(end)) %>%
-    dplyr::select(gene_name, id, event_id, chrm, start, end, strand, iso) %>%
-    dplyr::arrange (gene_name, id, start) %>%
-    group_by(event_id) %>%
-    mutate (y= as.numeric (factor(iso)), event_id=as.factor(event_id)) 
-  ref2=get_tx (events_df, iso1 )
-  event_label= events_df  %>%
-    mutate (label= paste0(gene_id,':',event_id,':',chrm,'(',strand,')')) %>%
-    dplyr::select (gene_id, event_id,type,chrm,strand, label) %>%
-    arrange (gene_id, event_id)
-  f=list()
-  for (i in 1:length (event_label$event_id)) {
-    df= filter (ours, event_id==event_label$event_id[i])
-    r= filter (ref2, event_id==event_label$event_id[i])
-    ev= filter (event_label, event_id==event_label$event_id[i])
-    f[[i]]=ggplot(df, aes(xmin=start, xmax=end, ymin=y+1, ymax=y+1.6)) +
-      geom_rect(fill='lightblue', color='black') + 
-      scale_y_continuous(breaks=c(1.3,unique(df$y)+1.3),labels=c(unique(r$id),unique(df$iso))) + 
-      ggtitle(ev$label) +
-      annotate("rect", xmin=r$start, xmax=r$end, ymin =1, ymax =1.6,
-               color='black', fill="red") 
-  }
-  return (f)
-}
-
-## function for event names based on genomic positions. input positions
+## function to create event names based on genomic positions. input positions
 splice_name= function (positions_df) {
   pos= positions_df %>%
     group_by (event_id) %>%
@@ -555,7 +445,6 @@ splice_name= function (positions_df) {
   for (i in unique (pos$event_id)) {
     t= filter (pos, event_id==i)
     exon=character()
-    
     for (k in t$position) {
       exon= paste(exon,k, sep=',')
     }
@@ -571,6 +460,7 @@ splice_name= function (positions_df) {
   return (pos2)
 }
 
+# find genomic position
 find_genomic = function (df) {
   new_df=data.frame (id=character(), genomic_position=numeric())
   neg= filter (df, strand=='-') %>%
@@ -655,8 +545,8 @@ find_last_mismatch = function (df) {
   return (new_df)
 }
 
-# function to create splicing protein changes figures
-# input positions data and final events data and samples df
+# function to create zoomed-in illustration of alternative splicing event with annotated protein changes
+# input positions data, final events data and samples df
 # output list with figures with first stop codon (red line), differences in proteins between isoforms (light green)
 # whether there was a frameshift relative between isoforms
 # choose whether 2nd figure is a jitter or dot plot
@@ -769,39 +659,150 @@ splicing_figure= function (events_df, positions_df, samples_df, fig2) {
     iso= filter (iso_label2, event_id==event_label$event_id[i])
     sts= filter (start_stop, event_id==event_label$event_id[i])
     rd= filter (reads, event_id==event_label$event_id[i])
-    f1=ggplot(df, aes(xmin=start, xmax=end, ymin=y, ymax=y+0.6)) +
+    f1=ggplot(df, aes(xmin=start, xmax=end, ymin=y, ymax=y+0.8)) +
       geom_rect(fill='lightblue', color='black') + 
-      scale_y_continuous(limits=c(0.5,3.1),breaks=unique(df$y)+0.3,labels=unique(df$iso)) + 
+      scale_y_continuous(limits=c(0.7,3.1),breaks=unique(df$y)+0.4,labels=unique(df$iso)) + 
       ggtitle(event_label$label[i]) + 
-      theme(axis.text=element_text(size=10, color='black')) +
-      annotate("rect", xmin=ss$genomic_stop-2, xmax=ss$genomic_stop+2, ymin =ss$y, ymax =ss$y+0.6,
+      theme(plot.title=element_text(size=18), axis.text.x=element_text(size=10, color='black'),
+            axis.text.y=element_text(size=12, color='black')) +
+      annotate("rect", xmin=ss$genomic_stop-2, xmax=ss$genomic_stop+2, ymin =ss$y, ymax =ss$y+0.8,
                color='red', fill="red") +
       annotate("rect", xmin=iso$newstart, xmax=iso$newend, 
-               ymin =iso$y, ymax =iso$y+0.6, fill="yellow", alpha=0.2) +
-      annotate ('text', x=sts$mid, y=0.7, label=rd$iso1,size=3) +
-      annotate ('text', x=sts$mid, y=2.9, label=rd$iso2,size=3) +
-      annotate ('text', x=sts$amb, y=0.7, label=event_label$ambig[i],size=3) +
-      annotate ('text', x=sts$fs, y=2.9, label=event_label$fshift[i],size=3) + xlab(NULL)+ylab(NULL)
+               ymin =iso$y, ymax =iso$y+0.8, fill="yellow", alpha=0.2) +
+      annotate ('text', x=sts$mid, y=0.8, label=rd$iso1,size=4) +
+      annotate ('text', x=sts$mid, y=3, label=rd$iso2,size=4) +
+      annotate ('text', x=sts$amb, y=0.8, label=event_label$ambig[i],size=4) +
+      annotate ('text', x=sts$fs, y=3, label=event_label$fshift[i],size=4) + xlab(NULL)+ylab(NULL)
     df=  filter(samples_df, event_id==event_label$event_id[i])
     if (fig2=='jitter') {
       f2=ggplot (df, aes(y=psi, x=group, color=group))+ geom_jitter(width=0.2, size=2, height=0) +
         scale_y_continuous(limits =c(0,1)) + xlab (NULL) + ylab ('PSI') + 
         scale_color_manual (values=c('darkblue', 'darkred')) + 
-        theme(legend.position = "none", axis.title.y=element_text(size=10,color='black'), 
-              axis.text=element_text(size=10, color='black')) 
+        theme(legend.position = "none", axis.title.y=element_text(size=14,color='black'), 
+              axis.text=element_text(size=14, color='black')) 
     } else if (fig2=='dot') {
       f2=ggplot (df, aes(x=psi))+ geom_dotplot()+ scale_x_continuous(limits=c(0,1))+
         theme(legend.position = "none") + ylab (NULL) + xlab ('PSI') 
-    } else {
-      f2= ggplot(df, aes(x=psi,y=iso_total))+geom_point()+ scale_x_continuous(limits=c(0,1))+
-        scale_y_continuous(limits=c(0,450))
-    }
+    } 
     f[[i]]= wrap_plots(f1,f2, widths=c(4,1)) 
   }
   return (f)
 }
 
-# input gene names in ensembl gene ID version
+# function to get transcript as reference for splicing event. it will be either canonical or the one that
+# matches to more exons of isoform 1 (shared exons)
+get_tx= function (events_df, iso1_df ) {
+  library (biomaRt)
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  df= dplyr::select(events_df, gene_name, gene_id, event_id)
+  genes= unique (df$gene_name)
+  tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', genes, 
+             attributes =c('ensembl_gene_id_version' , 'ensembl_transcript_id','transcript_start','transcript_end', 
+                           'transcription_start_site', 'transcript_is_canonical', 'transcript_length',
+                           'transcript_count', 'transcript_biotype') )
+  tx_canon= filter (tx, transcript_is_canonical==1) %>%
+    dplyr::select(ensembl_gene_id_version,ensembl_transcript_id, transcript_is_canonical) %>%
+    dplyr::rename (gene_name=ensembl_gene_id_version, tx_id=ensembl_transcript_id, canonical=transcript_is_canonical)
+  txlist= unique (tx$ensembl_transcript_id)
+  exons= getBM(mart =ensembl, filters='ensembl_transcript_id', txlist,
+               attributes =c('ensembl_transcript_id','ensembl_gene_id_version','chromosome_name', 'strand',
+                             'ensembl_exon_id','exon_chrom_start','exon_chrom_end', 'is_constitutive')) %>%
+    dplyr::select(ensembl_gene_id_version,ensembl_transcript_id,exon_chrom_start,exon_chrom_end,
+                  chromosome_name,strand) %>%
+    distinct () %>%
+    dplyr::rename (gene_name=ensembl_gene_id_version, tx_id=ensembl_transcript_id, 
+                   start=exon_chrom_start, end=exon_chrom_end ) %>%
+    mutate (start=as.numeric(start), end=as.numeric(end))
+  ex= iso1_df %>%
+    ungroup () %>%
+    dplyr::select (gene_name,event_id, start,end, exons) %>%
+    filter (exons !='e2') %>%
+    mutate (start=as.numeric(start), end=as.numeric(end), exons=ifelse(exons=='e4','e3',exons)) %>%
+    distinct() %>%
+    inner_join(exons, by=c('gene_name','start','end'),relationship="many-to-many") %>%
+    dplyr::select (-c(chromosome_name,strand))
+  tx2= ex %>%
+    group_by(gene_name,event_id,tx_id,exons) %>%
+    summarise (n=n()) %>%
+    pivot_wider(names_from ='exons', values_from ='n') %>%
+    mutate (n=sum(e1,e3,na.rm =T)) %>%
+    left_join(tx_canon, by=c('gene_name','tx_id')) %>%
+    ungroup () %>%
+    arrange (gene_name, event_id, desc(n),desc(canonical)) %>%
+    group_by(gene_name,event_id) %>%
+    slice_head (n=1) %>%
+    dplyr::select(-c(e1,e3))
+  notx= dplyr::select(iso1_df, gene_name, event_id) %>%
+    distinct () %>%
+    anti_join(tx2,by='event_id') %>%
+    left_join(tx_canon,by='gene_name') %>%
+    mutate (n=0)
+  tx3= rbind (tx2,notx)
+  ref= exons %>%
+    inner_join(tx3,by=c('gene_name','tx_id'),relationship="many-to-many") %>%
+    mutate (canonical=replace_na(canonical,0), 
+            strand= ifelse(strand==1,'+','-'), chrm=paste0('chr',chromosome_name),
+            id=ifelse (canonical==1,'Canonical',tx_id)) %>%
+    dplyr::select (gene_name,id, event_id, chrm, start, end, strand)
+  t= events_df %>%
+    ungroup () %>%
+    dplyr::select(gene_name, gene_id) %>%
+    distinct ()
+  ref2= ref %>%
+    left_join(t, by='gene_name') %>%
+    arrange (gene_id, start)
+  remove (ensembl)
+  detach("package:biomaRt", unload = TRUE)
+  return (ref2)
+}
+
+# zoomed-out figure with transcript 
+splice_figure_ref_TX= function (events_df , positions_df) {
+  pos= positions_df %>%
+    filter (event_id %in% events_df$event_id) %>%
+    arrange (gene_name, event_id, exons, start) %>%
+    mutate (type= str_extract(event_id,'[^.]+')) %>%
+    dplyr::select (gene_name, event_id, type, chrm, strand, exons, start, end) 
+  iso2= pos %>%
+    mutate (incl= ifelse (type=='mutex_exons' & ((strand=='+' & exons !='e2') | (strand=='-' & exons !='e3')),1,0),
+            iso='Isoform 2') %>%
+    filter (type !='mutex_exons' | incl==1) %>%
+    dplyr::select (-incl)
+  iso1= pos %>%
+    mutate (incl=ifelse (type=='mutex_exons' & ((strand=='+' & exons !='e3') | (strand=='-' & exons !='e2')),1,0), 
+            iso='Isoform 1') %>%
+    filter ((type !='mutex_exons' & exons !='e2') | incl==1) %>%
+    dplyr::select (-incl)
+  ours= rbind(iso1, iso2) %>%
+    mutate (id= ifelse (iso=='Isoform 1', paste0(event_id,'_iso1'), paste0(event_id,'_iso2')),
+            start=as.numeric(start), end=as.numeric(end)) %>%
+    dplyr::select(gene_name, id, event_id, chrm, start, end, strand, iso) %>%
+    dplyr::arrange (gene_name, id, start) %>%
+    group_by(event_id) %>%
+    mutate (y= as.numeric (factor(iso)), event_id=as.factor(event_id)) 
+  ref2=get_tx (events_df, iso1 )
+  event_label= events_df  %>%
+    mutate (label= paste0(gene_id,':',event_id,':',chrm,'(',strand,')')) %>%
+    dplyr::select (gene_id, event_id,type,chrm,strand, label) %>%
+    arrange (gene_id, event_id)
+  f=list()
+  for (i in 1:length (event_label$event_id)) {
+    df= filter (ours, event_id==event_label$event_id[i])
+    r= filter (ref2, event_id==event_label$event_id[i])
+    ev= filter (event_label, event_id==event_label$event_id[i])
+    f[[i]]=ggplot(df, aes(xmin=start, xmax=end, ymin=y+1, ymax=y+1.8)) +
+      geom_rect(fill='darkgoldenrod1', color='black') + 
+      scale_y_continuous(breaks=c(1.4,unique(df$y)+1.4),labels=c(unique(r$id),unique(df$iso))) + 
+      ggtitle(ev$label) +
+      annotate("rect", xmin=r$start, xmax=r$end, ymin =1, ymax =1.8,
+               color='black', fill="darkgrey")+
+      theme (plot.title =element_text(size=18), axis.text.x =element_text(size=10,color='black'),
+             axis.text.y=element_text(size=12, color='black'))
+  }
+  return (f)
+}
+
+# Protein domains. input gene names in ensembl gene ID version
 get_domains= function (gene_names) {
   library (biomaRt)
   # human genes GRCh38.p13 version 108
@@ -882,6 +883,7 @@ get_domains= function (gene_names) {
   return (domains3)
 }
 
+# Process exons
 get_exons= function (gene_names) {
   library (biomaRt)
   ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
@@ -972,13 +974,15 @@ domain_fig= function (ensembl_genes) {
     dd= filter (domains, tx_id==gene_lbl$tx_id[i]) 
     gg= filter (gene_lbl, tx_id==gene_lbl$tx_id[i])
     dd_lbls= filter (dd_lbl, tx_id==gene_lbl$tx_id[i])
-    f[[i]]= ggplot(dd, aes(xmin=interpro_start, xmax=interpro_end, ymin=y, ymax =y+0.6, fill=interpro)) +
+    f[[i]]= ggplot(dd, aes(xmin=interpro_start, xmax=interpro_end, ymin=y, ymax =y+0.8, fill=interpro)) +
       geom_rect (alpha=1) + 
       scale_fill_discrete (name=NULL, limits=dd_lbls$interpro, labels=dd_lbls$interpro_description) + 
       theme(legend.position = "bottom", legend.direction="vertical",legend.justification='left') +
-      ggtitle (gg$gene_id) +
-      annotate("rect", xmin=ex$aa_start, xmax=ex$aa_end, ymin =ex$y, ymax =ex$y+0.6, color='black',fill='lightblue')+
-      scale_y_continuous(breaks = NULL)
+      ggtitle (paste0(gg$gene_id,':Exons+Protein Domains')) +
+      annotate("rect", xmin=ex$aa_start, xmax=ex$aa_end, ymin =ex$y, ymax =ex$y+0.8, 
+               color='black',fill='darkgrey')+
+      scale_y_continuous(breaks = NULL)+ scale_x_continuous(breaks = NULL)+
+      theme (plot.title =element_text(size=18), legend.text =element_text(size=16))
   }
   return (f)
 }
