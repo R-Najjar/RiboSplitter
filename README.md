@@ -33,7 +33,7 @@ isoforms= read_isoforms (dir)
 ```
 Note 1: SplAdder's naming convention is to name the longer isoform as isoform 2. This works for most event types but I think it creates confusion for mutually exclusive events where either of the middle exons can be longer, or they can have the same length. I solve this by renaming them so that isoform 1 is always the first one in genomic location and by adjusting the PSI accordingly. 
 
-Note 2: If using a different tool than SplAdder, you can still run RiboSplitter by creating the two datasets above from the tool's output. Include the following variables in the details dataset: gene_name, event_id, chrm, strand, type; start:stop genomic positions for involved exons (e1, e2, e3, e4); and for multiple exon skip events only, e2_starts contains colon separated start positions for all skipped exons, and e2_ends contains the end positions for multiple skipped exons. Format the isoforms dataset to include: event_id, sample, iso1, iso2, iso_total, psi, group.
+Note 2: If using a different tool than SplAdder, you can still run RiboSplitter by creating the two datasets above from the tool's output. Include the following variables in the details dataset: gene_name, event_id, chrm, strand, type; start:stop genomic positions for involved exons (e1, e2, e3, e4); and for multiple exon skip events only, e2_starts contains colon separated start positions for all skipped exons, and e2_ends contains the end positions for multiple skipped exons. Format the isoforms dataset to include: event_id, sample, iso1, iso2, iso_total, and psi.
 
 Next, merge your metadata with the isoforms dataset (adding a variable called 'group' that classifies the samples into disease and control)
 
