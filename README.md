@@ -14,32 +14,32 @@ RiboSplitter will:
 
 
 ## Use
-First run Spladder
+First run SplAdder
 
 Load functions
 ```
 source ([raw url ribosplitter.R])
 ```
 Two datasets are required to start: 
-- A dataset of details of alternative splicing events including gene name, event ID, genomic locations of involved exons. This will be called 'details'. These are Spladder confirmed events. Provide the dir path to Spladder output
+- A dataset of details of alternative splicing events including gene name, event ID, genomic locations of involved exons. This will be called 'details'. These are SplAdder confirmed events. Provide the dir path to SplAdder output
 ```
 details= read_details (dir)
 ```
 
 
-- A dataset of read counts supporting isoforms 1 and 2 for each sample per event plus percent spliced-in (PSI). This will be called 'isoforms'. Spladder does not calculate PSI when isoform counts are <10 so these will be NA. Provide the dir path to Spladder output 
+- A dataset of read counts supporting isoforms 1 and 2 for each sample per event plus percent spliced-in (PSI). This will be called 'isoforms'. PSI is set to missing when isoform counts are <10. Provide the dir path to SplAdder output 
 ```
 isoforms= read_isoforms (dir)
 ```
-Note 1: SplAdder's naming convention is to name the longer isoform as isoform 2. This works for most event types but I think it creates confusion for mutually exclusive events where the two exons in the middle can be of the same length. I solve this by renaming them so that isoform 1 is always the first one in genomic location and by adjusting the PSI accordingly. 
+Note 1: SplAdder's naming convention is to name the longer isoform as isoform 2. This works for most event types but I think it creates confusion for mutually exclusive events where either of the middle exons can be longer, or they can have the same length. I solve this by renaming them so that isoform 1 is always the first one in genomic location and by adjusting the PSI accordingly. 
 
-Note 2: If using a different tool than SplAdder, you can still run RiboSplitter by creating the two datasets above from the tool's output.
+Note 2: If using a different tool than SplAdder, you can still run RiboSplitter by creating the two datasets above from the tool's output. Include the following variables in the details dataset: gene_name, event_id, chrm, strand, type; start:stop genomic positions for involved exons (e1, e2, e3, e4); and for multiple exon skip events only, e2_starts contains colon separated start positions for all skipped exons, and e2_ends contains the end positions for multiple skipped exons. Format the isoforms dataset to include: event_id, sample, iso1, iso2, iso_total, psi, group.
 
 Next, merge your metadata with the isoforms dataset (adding a variable called 'group' that classifies the samples into disease and control)
 
 
 ### Filtering and statistical testing
-After filtering (events that are non-coding, low variability, or have many missing values), RiboSplitter uses a beta binomial model with overdispersion to allow for variability by group, with p values adjusted for multiple comparisons using the BH methodology.
+After filtering (events that are non-coding, have low variability, or have many missing values), RiboSplitter uses a beta binomial model with overdispersion to allow for variability by group, with p values adjusted for multiple comparisons using the BH methodology.
 
 Not all events will be present in all samples. This could reflect real biology (e.g. disease heterogeneity), or incomplete/low sequencing coverage in some samples for specific splicing events. Therefore, we must decide how many samples per group are required for the event to be included (n_dis and n_hc below). Additionally, a value for sd is needed, which is the lowest PSI SD for an event to be included, I recommend using a low value (e.g. 0.05)
 
@@ -74,7 +74,7 @@ bed= positions %>%
 write_delim (bed, [path diff_events.bed'], col_names =F, delim='\t')
 ```
 
-Use bedtools. note that strand matters
+Use bedtools
 ```
 bedtools getfasta -fi GRCh38.primary_assembly.genome.fa -bed ./diff_events.bed  \
   -fo ./diff_seq -s -tab
@@ -108,7 +108,7 @@ possibleframe= filter (exon1frames, validframe !='no protein')$event_id
 samples= filter (isoforms, event_id %in% possibleframe ) %>%
   mutate (grp= as.factor (group))
 
-# Run beta binomial model, adjustment for multiple hypotheses testing, and create event-level dataset (each row is a splicing event)
+# This will run beta binomial model, adjust for multiple hypotheses testing, and create event-level dataset (each row is a splicing event)
 diff_events= event_level (samples, details2)
 ```
 
@@ -123,18 +123,19 @@ table (frames[,c(2,5)])
 ```
 
 Next, run function to put exons on one row per event to create isoform 1 and isoform 2 in DNA sequence 
-then use frame to translate them
+then translate them to amino acid sequences 
 ```
 t= filter (positions2, event_id %in% allsle2$event_id)
 iso_dna= stitch_exons (t, frames)
 ```
 
 ### Protein changes prediction
+This function will extract amino acid sequences that are the same at the beginning and end of the peptides from the two isoforms, and sequences that are different between the two isoforms
 ```
 protein_diff= protein_changes (iso_dna)
 ```
 
-Create names for splicing events based on genomic coordinates (chromosome, strand, then start and stop positions of exons)
+Create names for splicing events based on genomic coordinates (chromosome, strand, start and stop positions of exons)
 ```
 positions3= filter (positions2, event_id %in% diff_events$event_id)
 names= splice_name(positions3)
@@ -182,28 +183,26 @@ f= splicing_figure(final_df, positions3, isoforms, fig2='jitter')
 ggsave(paste0(out_dir,'/exons_figure.png'), plot=wrap_plots(f[1:30], ncol=3), 
        dpi=300,units='cm', height=45, width=60)
 ```
-This figure will tell us the gene name, splicing event ID, chromosome, strand, and adjusted p value (q value). The x axis is genomic position. The upper left corner shows the relative frameshift between the two isoforms. The counts above and below the isoforms are reads supporting either isoform. Light blue exons mean they have the same amino acid sequences in both isoforms, while light green exons indicates relative differences in amino acid sequences. The adjacent figure shows PSI for all samples by group. Note that a PSI of 1 means there is 100% isoform 2 expression in that sample.
-![fig1](https://github.com/R-Najjar/RiboSplitter/assets/119631106/78523829-50d6-45c3-a4ea-ae5ecc43a7ad)
+This figure will show the gene name, splicing event ID, chromosome, strand, and adjusted p value (q value). The x axis is genomic position. The upper left corner shows the relative frameshift between the two isoforms. The counts above and below the isoforms are reads supporting either isoform. Light blue exons mean they have the same amino acid sequences in both isoforms, while light green exons indicate relative differences in amino acid sequences. The adjacent figure shows PSI for all samples by group. Note that a PSI of 1 means there is 100% isoform 2 expression in that sample.
+![fig1](https://github.com/R-Najjar/RiboSplitter/assets/119631106/9880ba30-9748-4fb9-b877-c598e9e603e0)
 
 
-A 2nd figure can be generated as below that will zoom out and show the event with its best fit gene transcript, so we can see the location of the splicing event. 
+
+A 2nd figure can be generated as below that will zoom out and show the event with its best fit transcript, so we can see the location of the splicing event. 
 ```
 f= splice_figure_ref_TX (final_df , positions3)
 ggsave(paste0(out_dir,'/exons_ref_transcript.png'), plot=wrap_plots(f[1:30], ncol=3),
            dpi=300,units='cm', height=40, width=60)
 ```
-![fig2](https://github.com/R-Najjar/RiboSplitter/assets/119631106/dcfcd133-88ec-485a-84e7-0e37e51c9e5e)
+![fig2](https://github.com/R-Najjar/RiboSplitter/assets/119631106/405637aa-fa1e-46ef-9643-ff28ff59e4a4)
 
 
-
-A 3rd figure aligns exons (light blue) to protein domains
+A 3rd figure aligns exons (grey) to protein domains
 ```
 domain_fig('ENSG00000064012.24')
 
 # you can also create domain figures for all genes of interest as below:
 domains_figs= domain_fig (final_df$gene_name)
 ```
-![fig3](https://github.com/R-Najjar/RiboSplitter/assets/119631106/348ee61c-7992-48c0-bc81-9d29f6e79cfd)
-
-
+![fig3](https://github.com/R-Najjar/RiboSplitter/assets/119631106/370cf247-695b-4490-992c-4d87e1af6f87)
 
