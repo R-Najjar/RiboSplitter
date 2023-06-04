@@ -659,27 +659,27 @@ splicing_figure= function (events_df, positions_df, samples_df, fig2) {
     iso= filter (iso_label2, event_id==event_label$event_id[i])
     sts= filter (start_stop, event_id==event_label$event_id[i])
     rd= filter (reads, event_id==event_label$event_id[i])
-    f1=ggplot(df, aes(xmin=start, xmax=end, ymin=y, ymax=y+0.8)) +
+    f1=ggplot(df, aes(xmin=start, xmax=end, ymin=y, ymax=y+0.7)) +
       geom_rect(fill='lightblue', color='black') + 
-      scale_y_continuous(limits=c(0.7,3.1),breaks=unique(df$y)+0.4,labels=unique(df$iso)) + 
-      ggtitle(event_label$label[i]) + 
-      theme(plot.title=element_text(size=18), axis.text.x=element_text(size=10, color='black'),
-            axis.text.y=element_text(size=12, color='black')) +
-      annotate("rect", xmin=ss$genomic_stop-2, xmax=ss$genomic_stop+2, ymin =ss$y, ymax =ss$y+0.8,
+      scale_y_continuous(limits=c(0.6,3.1),breaks=unique(df$y)+0.35,labels=unique(df$iso)) + 
+      ggtitle(event_label$label[i]) +
+      annotate("rect", xmin=ss$genomic_stop-2, xmax=ss$genomic_stop+2, ymin =ss$y, ymax =ss$y+0.7,
                color='red', fill="red") +
       annotate("rect", xmin=iso$newstart, xmax=iso$newend, 
-               ymin =iso$y, ymax =iso$y+0.8, fill="yellow", alpha=0.2) +
-      annotate ('text', x=sts$mid, y=0.8, label=rd$iso1,size=4) +
+               ymin =iso$y, ymax =iso$y+0.7, fill="yellow", alpha=0.2) +
+      annotate ('text', x=sts$mid, y=0.7, label=rd$iso1,size=4) +
       annotate ('text', x=sts$mid, y=3, label=rd$iso2,size=4) +
-      annotate ('text', x=sts$amb, y=0.8, label=event_label$ambig[i],size=4) +
-      annotate ('text', x=sts$fs, y=3, label=event_label$fshift[i],size=4) + xlab(NULL)+ylab(NULL)
+      annotate ('text', x=sts$amb, y=0.7, label=event_label$ambig[i],size=4) +
+      annotate ('text', x=sts$fs, y=3, label=event_label$fshift[i],size=4) + xlab(NULL)+ylab(NULL) + 
+      theme(plot.title=element_text(size=16), axis.text.x=element_text(size=10, color='black'),
+            axis.text.y=element_text(size=11, color='black'))
     df=  filter(samples_df, event_id==event_label$event_id[i])
     if (fig2=='jitter') {
       f2=ggplot (df, aes(y=psi, x=group, color=group))+ geom_jitter(width=0.2, size=2, height=0) +
         scale_y_continuous(limits =c(0,1)) + xlab (NULL) + ylab ('PSI') + 
         scale_color_manual (values=c('darkblue', 'darkred')) + 
-        theme(legend.position = "none", axis.title.y=element_text(size=14,color='black'), 
-              axis.text=element_text(size=14, color='black')) 
+        theme(legend.position = "none", axis.title.y=element_text(size=11,color='black'), 
+              axis.text=element_text(size=12, color='black')) 
     } else if (fig2=='dot') {
       f2=ggplot (df, aes(x=psi))+ geom_dotplot()+ scale_x_continuous(limits=c(0,1))+
         theme(legend.position = "none") + ylab (NULL) + xlab ('PSI') 
@@ -796,8 +796,8 @@ splice_figure_ref_TX= function (events_df , positions_df) {
       ggtitle(ev$label) +
       annotate("rect", xmin=r$start, xmax=r$end, ymin =1, ymax =1.8,
                color='black', fill="darkgrey")+
-      theme (plot.title =element_text(size=18), axis.text.x =element_text(size=10,color='black'),
-             axis.text.y=element_text(size=12, color='black'))
+      theme (plot.title =element_text(size=16), axis.text.x =element_text(size=10,color='black'),
+             axis.text.y=element_text(size=11, color='black'))
   }
   return (f)
 }
@@ -982,7 +982,7 @@ domain_fig= function (ensembl_genes) {
       annotate("rect", xmin=ex$aa_start, xmax=ex$aa_end, ymin =ex$y, ymax =ex$y+0.8, 
                color='black',fill='darkgrey')+
       scale_y_continuous(breaks = NULL)+ scale_x_continuous(breaks = NULL)+
-      theme (plot.title =element_text(size=18), legend.text =element_text(size=16))
+      theme (plot.title =element_text(size=16), legend.text =element_text(size=14))
   }
   return (f)
 }
