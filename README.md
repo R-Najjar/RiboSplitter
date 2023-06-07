@@ -184,7 +184,8 @@ ggsave(paste0(out_dir,'/exons_figure.png'), plot=wrap_plots(f[1:30], ncol=3),
        dpi=300,units='cm', height=45, width=60)
 ```
 This figure will show the gene name, splicing event ID, chromosome, strand, and adjusted p value (q value). The x axis is genomic position. The upper left corner shows the relative frameshift between the two isoforms. The counts above and below the isoforms are reads supporting either isoform. Light blue exons mean they have the same amino acid sequences in both isoforms, while light green exons indicate relative differences in amino acid sequences. The adjacent figure shows PSI for all samples by group. Note that a PSI of 1 means there is 100% isoform 2 expression in that sample.
-![fig1](https://github.com/R-Najjar/RiboSplitter/assets/119631106/9880ba30-9748-4fb9-b877-c598e9e603e0)
+![fig1](https://github.com/R-Najjar/RiboSplitter/assets/119631106/daa371d2-e20f-43b8-83d1-9a21b903bb1d)
+
 
 
 
@@ -194,7 +195,8 @@ f= splice_figure_ref_TX (final_df , positions3)
 ggsave(paste0(out_dir,'/exons_ref_transcript.png'), plot=wrap_plots(f[1:30], ncol=3),
            dpi=300,units='cm', height=40, width=60)
 ```
-![fig2](https://github.com/R-Najjar/RiboSplitter/assets/119631106/405637aa-fa1e-46ef-9643-ff28ff59e4a4)
+![fig2](https://github.com/R-Najjar/RiboSplitter/assets/119631106/65c74baa-ddbc-46bd-a219-e694918116f5)
+
 
 
 A 3rd figure aligns exons (grey) to protein domains
@@ -204,5 +206,7 @@ domain_fig('ENSG00000064012.24')
 # you can also create domain figures for all genes of interest as below:
 domains_figs= domain_fig (final_df$gene_name)
 ```
-![fig3](https://github.com/R-Najjar/RiboSplitter/assets/119631106/370cf247-695b-4490-992c-4d87e1af6f87)
+![fig3](https://github.com/R-Najjar/RiboSplitter/assets/119631106/1dc529f0-2222-4af0-8664-f4106d659101)
+
+
 
