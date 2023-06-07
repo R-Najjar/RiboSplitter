@@ -16,7 +16,7 @@ RiboSplitter will:
 ## Use
 First run SplAdder
 
-Load functions
+Clone the repository, or load the functions from raw url
 ```
 source ([raw url ribosplitter.R])
 ```
