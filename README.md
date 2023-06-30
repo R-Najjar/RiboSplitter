@@ -27,9 +27,9 @@ details= read_details (dir)
 ```
 
 
-- A dataset of read counts supporting isoforms 1 and 2 for each sample per event plus percent spliced-in (PSI). This will be called 'isoforms'. PSI is set to missing when isoform counts are <10. Provide the dir path to SplAdder output 
+- A dataset of read counts supporting isoforms 1 and 2 for each sample per event plus percent spliced-in (PSI). This will be called 'isoforms'. PSI is set to missing when isoform counts are <10. Provide the dir path to SplAdder output and prefix of the sample names
 ```
-isoforms= read_isoforms (dir)
+isoforms= read_isoforms (dir, 'sample_prefix')
 ```
 Note 1: SplAdder's naming convention is to name the longer isoform as isoform 2. This works for most event types but I think it creates confusion for mutually exclusive events where either of the middle exons can be longer, or they can have the same length. I solve this by renaming them so that isoform 1 is always the first one in genomic location and by adjusting the PSI accordingly. 
 
