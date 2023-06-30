@@ -36,7 +36,7 @@ read_details= function (dir) {
 }
 
 # isoforms 
-read_isoforms= function (dir) {
+read_isoforms= function (dir, prefix) {
   setwd(dir)
   hf1= H5Fopen ('merge_graphs_exon_skip_C3.counts.hdf5')
   hf2= H5Fopen ('merge_graphs_alt_3prime_C3.counts.hdf5')
@@ -53,17 +53,17 @@ read_isoforms= function (dir) {
     colnames(iso1)= hf$samples  
     iso1= as.data.frame (iso1) %>%
       mutate (event_id=paste0(event_type,'.',row_number())) %>%
-      pivot_longer(cols=starts_with('sorted'),names_to ='sample',values_to ='iso1')
+      pivot_longer(cols=starts_with(prefix),names_to ='sample',values_to ='iso1')
     iso2= hf$iso2 
     colnames(iso2)= hf$samples  
     iso2= as.data.frame (iso2) %>%
       mutate (event_id=paste0(event_type,'.',row_number())) %>%
-      pivot_longer(cols=starts_with('sorted'),names_to ='sample',values_to ='iso2')
+      pivot_longer(cols=starts_with(prefix),names_to ='sample',values_to ='iso2')
     psi= hf$psi 
     colnames(psi)= hf$samples  
     psi= as.data.frame (psi) %>%
       mutate (event_id=paste0(event_type,'.',row_number())) %>%
-      pivot_longer(cols=starts_with('sorted'),names_to ='sample',values_to ='psi')
+      pivot_longer(cols=starts_with(prefix),names_to ='sample',values_to ='psi')
     fin= full_join(iso1,iso2,by=c('event_id','sample')) %>%
       full_join(psi,by=c('event_id','sample')) %>%
       filter (event_id %in% confirmed$event_id )
