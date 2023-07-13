@@ -55,7 +55,7 @@ Exclude events in non-coding genes
 ```
 g= gene_info (details$gene_name)
 details2= details %>%
-  filter (event_id %in% events) %>%
+  filter (event_id %in% events$event_id) %>%
   left_join(g, by='gene_name') %>%
   mutate (type= str_extract(event_id,'[^.]+')) %>%
   filter (gene_biotype== 'protein_coding')
@@ -115,7 +115,7 @@ diff_events= event_level (samples, details2)
 ### Reading frame prediction, part II
 Continue reading frame prediction, this time by comparing translated peptides to known gene products
 ```
-t= filter (exon1frames, event_id %in% allsle2$event_id) 
+t= filter (exon1frames, event_id %in% diff_events$event_id) 
 frames= peptide_match (t, details2)
 
 table (frames[,3:4])
@@ -125,7 +125,7 @@ table (frames[,c(2,5)])
 Next, run function to put exons on one row per event to create isoform 1 and isoform 2 in DNA sequence 
 then translate them to amino acid sequences 
 ```
-t= filter (positions2, event_id %in% allsle2$event_id)
+t= filter (positions2, event_id %in% diff_events$event_id)
 iso_dna= stitch_exons (t, frames)
 ```
 
