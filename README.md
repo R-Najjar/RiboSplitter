@@ -142,11 +142,13 @@ names= splice_name(positions3)
 ```
 
 
-Finally, put all together
+Finally, put all together and create simplified frameshift variable
 ```
 final_df= left_join(diff_events, names,by='event_id') %>%
   relocate (genomic_name, .after=event_id) %>%
-  left_join(protein_diff, by=c('gene_name', 'event_id'))
+  left_join(protein_diff, by=c('gene_name', 'event_id')) %>%
+  mutate (frameshift= ifelse (type=='mutex_exons' & e2shift != e3shift, abs(e2shift-e3shift),
+                              ifelse (type !='mutex_exons' & e2shift>0,e2shift,0)))
 ```
 Note: save the positions and isoforms datasets as these will be needed for visualizations
 
