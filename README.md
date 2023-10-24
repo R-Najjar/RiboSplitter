@@ -38,122 +38,35 @@ Note 2: If using a different tool than SplAdder, you can still run RiboSplitter 
 Next, merge your metadata with the isoforms dataset (adding a variable called 'group' that classifies the samples into disease and control)
 
 
-### Filtering and statistical testing
+## Running pipeline
+Use ribosplitter function to run full pipeline: filtering, statistical testing, multiple comparison adjustment, reading frame prediction, protein translation, amino acid differences between isoforms, genomic names.
+
+Input parameters
+- "isoforms" and "details" dataframes. "isoforms" must contain a "group" variables with 2 values: "disease" and "control"
+- min_disease: alternative splicing events with this minimum number of disease samples will be included
+- min_control: alternative splicing events with this minimum number of control samples will be included
+- sd_cutoff: The lowest PSI SD for an event to be included
+- dir: path to save output files
+- ref_fasta: path to reference genome fasta (needed to extract exon DNA sequences)
+- q_cutoff: alpha value for q values (p values adjusted for multiple comparisons)
+
 After filtering (events that are non-coding, have low variability, or have many missing values), RiboSplitter uses a beta binomial model with overdispersion to allow for variability by group, with p values adjusted for multiple comparisons using the BH methodology.
 
-Not all events will be present in all samples. This could reflect real biology (e.g. disease heterogeneity), or incomplete/low sequencing coverage in some samples for specific splicing events. Therefore, we must decide how many samples per group are required for the event to be included (n_dis and n_hc below). Additionally, a value for sd is needed, which is the lowest PSI SD for an event to be included, I recommend using a low value (e.g. 0.05)
+Not all events will be present in all samples. This could reflect real biology (e.g. disease heterogeneity), or incomplete/low sequencing coverage in some samples for specific splicing events. Therefore, we must decide how many samples per group are required for the event to be included. Additionally, low-variability events are excluded, based on PSI SD, I recommend using a low cutoff (e.g. sd_cutoff=0.05)
 
-```
-events= isoforms %>%
-    group_by(event_id) %>%
-    summarise(sd= sd(psi), n_dis= sum (group=='disease'), n_hc= sum(group=='control') ) %>%
-    filter (n_dis >=[number] & n_nt >=[number]) %>%
-    filter (sd >=[number]) 
-```
 
-Exclude events in non-coding genes
+Example
 ```
-g= gene_info (details$gene_name)
-details2= details %>%
-  filter (event_id %in% events$event_id) %>%
-  left_join(g, by='gene_name') %>%
-  mutate (type= str_extract(event_id,'[^.]+')) %>%
-  filter (gene_biotype== 'protein_coding')
-```
-
-Create a new dataset 'positions' with each row being a single exon with its genomic positions. Then create a bed file to extract DNA code of each exon
-```
-positions=exon_positions (details2)
-
-bed= positions %>%
-  mutate (start=as.character (as.numeric(start)-1) ,
-          score=300, id= paste0(chrm,':',start,"-",end,'(',strand,')')) %>%
-  select (chrm, start, end, id, score, strand) %>%
-  distinct ()
-
-write_delim (bed, [path diff_events.bed'], col_names =F, delim='\t')
-```
-
-Use bedtools
-```
-bedtools getfasta -fi GRCh38.primary_assembly.genome.fa -bed ./diff_events.bed  \
-  -fo ./diff_seq -s -tab
-```
-
-Read file output from bedtools
-```
-s= read.table(paste0(dir,'/diff_seq'))
-colnames(s)= (c('bed_id','seq'))
-
-# format and merge back to positions
-positions2= positions %>%
-  mutate (start=as.character (as.numeric(start)-1), 
-          bed_id= paste0(chrm,':', start, "-",end,'(',strand,')'),
-          start=as.character (as.numeric(start)+1)) %>%
-  left_join(s,by='bed_id') 
-```
-
-### Reading frame prediction, part I
-```
-# Identify events with a single open reading frame in first 5 prime exon
-exon1frames= first_exon (positions2)
-
-# This excludes noncoding transcripts
-possibleframe= filter (exon1frames, validframe !='no protein')$event_id
+de_events= ribosplitter (isoforms_df=isoforms, details_df=details, min_disease=10, min_control=10, sd_cutoff=0.05,
+               dir='~/rna/sjogrenB', ref_fasta='~/rna/nw/GRCh38.primary_assembly.genome.fa',
+               q_cutoff=0.05)
 
 ```
 
-### Statistical testing
-```
-samples= filter (isoforms, event_id %in% possibleframe ) %>%
-  mutate (grp= as.factor (group))
 
-# This will run beta binomial model, adjust for multiple hypotheses testing, and create event-level dataset (each row is a splicing event)
-diff_events= event_level (samples, details2)
-```
-
-### Reading frame prediction, part II
-Continue reading frame prediction, this time by comparing translated peptides to known gene products
-```
-t= filter (exon1frames, event_id %in% diff_events$event_id) 
-frames= peptide_match (t, details2)
-
-table (frames[,3:4])
-table (frames[,c(2,5)])
-```
-
-Next, run function to put exons on one row per event to create isoform 1 and isoform 2 in DNA sequence 
-then translate them to amino acid sequences 
-```
-t= filter (positions2, event_id %in% diff_events$event_id)
-iso_dna= stitch_exons (t, frames)
-```
-
-### Protein changes prediction
-This function will extract amino acid sequences that are the same at the beginning and end of the peptides from the two isoforms, and sequences that are different between the two isoforms
-```
-protein_diff= protein_changes (iso_dna)
-```
-
-Create names for splicing events based on genomic coordinates (chromosome, strand, start and stop positions of exons)
-```
-positions3= filter (positions2, event_id %in% diff_events$event_id)
-names= splice_name(positions3)
-```
-
-
-Finally, put all together and create simplified frameshift variable
-```
-final_df= left_join(diff_events, names,by='event_id') %>%
-  relocate (genomic_name, .after=event_id) %>%
-  left_join(protein_diff, by=c('gene_name', 'event_id')) %>%
-  mutate (frameshift= ifelse (type=='mutex_exons' & e2shift != e3shift, abs(e2shift-e3shift),
-                              ifelse (type !='mutex_exons' & e2shift>0,e2shift,0)))
-```
-Note: save the positions and isoforms datasets as these will be needed for visualizations
 
 ### Output
-The output dataset 'final_df' will have the following elements:
+The output dataset will have the following elements:
 
 | Variable(s) | Description |
 | --- | --- |
