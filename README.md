@@ -9,12 +9,12 @@ RiboSplitter will:
 - Create 3 figures: a zoomed-in view to show details and protein changes of the event, a zoomed-out view to show the location of the event relative to the full transcript, and a figure with protein domains aligned to exons. 
 
 ## Requirements
-- R libraries: tidyverse, Biostrings, biomaRt, patchwork, rhdf5, aod
-- bedtools
+- R (4.2.1) libraries: tidyverse (2.0.0), Biostrings (2.66.0), biomaRt (2.54.1), patchwork (1.1.3), rhdf5 (2.42.1), aod (1.3.2)
+- bedtools (2.30.0)
 
 
 ## Use
-First run SplAdder
+First run SplAdder (3.0.3)
 
 Clone the repository, or load functions from raw url
 ```
