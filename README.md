@@ -35,11 +35,11 @@ Note 1: SplAdder's naming convention is to name the longer isoform as isoform 2.
 
 Note 2: If using a different tool than SplAdder, you can still run RiboSplitter by creating the two datasets above from the tool's output. Include the following variables in the details dataset: gene_name, event_id, chrm, strand, type; start:stop genomic positions for involved exons (e1, e2, e3, e4); and for multiple exon skip events only, e2_starts contains colon separated start positions for all skipped exons, and e2_ends contains the end positions for multiple skipped exons. Format the isoforms dataset to include: event_id, sample, iso1, iso2, iso_total, and psi.
 
-Next, merge your metadata with the isoforms dataset (adding a variable called 'group' that classifies the samples into disease and control)
+Next, merge your metadata with the isoforms dataset (adding a variable called "group" that classifies the samples into "disease" and "control")
 
 
 ## Running pipeline
-Use ribosplitter function to run full pipeline: filtering, statistical testing, multiple comparison adjustment, reading frame prediction, protein translation, amino acid differences between isoforms, genomic names.
+Use ribosplitter function to run full pipeline: filtering, statistical testing, multiple comparison adjustment, reading frame prediction, protein translation, amino acid differences between isoforms, and generate event genomic names.
 
 Input parameters
 - "isoforms" and "details" dataframes. "isoforms" must contain a "group" variables with 2 values: "disease" and "control"
@@ -57,9 +57,11 @@ Not all events will be present in all samples. This could reflect real biology (
 
 Example
 ```
-de_events= ribosplitter (isoforms_df=isoforms, details_df=details, min_disease=10, min_control=10, sd_cutoff=0.05,
-               dir='~/rna/sjogrenB', ref_fasta='~/rna/nw/GRCh38.primary_assembly.genome.fa',
-               q_cutoff=0.05)
+de_events= ribosplitter (isoforms_df=isoforms, details_df=details,
+                min_disease=10, min_control=10, sd_cutoff=0.05,
+                dir='~/rna/sjogrenB',
+                ref_fasta='~/rna/nw/GRCh38.primary_assembly.genome.fa',
+                q_cutoff=0.05)
 
 ```
 
@@ -87,12 +89,13 @@ The output dataset will have the following elements:
 | diff_iso1 | amino acid sequences that are different in isoform 1 (compared to 2) |
 | diff_iso2 | amino acid sequences that are different in isoform 2 (compared to 1) |
 
+A dataset called "positions" will be saved in the provided "dir". This contains event genomic positions and is needed to generate figures.
 
 ## Visualization
 
 This function will create a zoomed-in view of alternative splicing events. Fig2 can be 'jitter' or 'dot'
 ```
-f= splicing_figure(final_df, positions3, isoforms, fig2='jitter')
+f= splicing_figure(final_df, positions, isoforms, fig2='jitter')
 
 # You can either save an individual figure or output multiple in one large figure as below
 ggsave(paste0(out_dir,'/exons_figure.png'), plot=wrap_plots(f[1:30], ncol=3), 
@@ -104,7 +107,7 @@ This figure will show the gene name, splicing event ID, chromosome, strand, and 
 
 
 
-A 2nd figure can be generated as below that will zoom out and show the event with its best fit transcript, so we can see the location of the splicing event. 
+A 2nd figure can be generated as below that will zoom out and show the event parallel to its best fit transcript, so we can see the location of the splicing event. 
 ```
 f= splice_figure_ref_TX (final_df , positions3)
 ggsave(paste0(out_dir,'/exons_ref_transcript.png'), plot=wrap_plots(f[1:30], ncol=3),
