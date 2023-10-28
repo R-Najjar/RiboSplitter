@@ -87,6 +87,89 @@ read_isoforms= function (dir, prefix) {
   return (isoforms)
 }
 
+# wrapper function for pipeline
+# isoforms must contain a "group" variable with 2 values only: "disease" and "control"
+ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cutoff=0.05,
+                        dir, ref_fasta, q_cutoff) {
+  suppressWarnings({
+    events= isoforms_df %>%
+      group_by(event_id) %>%
+      summarise(sd= sd(psi), n_dis= sum (group=='disease'), n_hc= sum(group=='control') ) %>%
+      filter (n_dis >=min_disease & n_hc >=min_control) %>%
+      filter (sd >=sd_cutoff) 
+    
+    g= gene_info (details_df$gene_name)
+    details2= details_df %>%
+      filter (event_id %in% events$event_id) %>%
+      left_join(g, by='gene_name') %>%
+      mutate (type= str_extract(event_id,'[^.]+')) %>%
+      filter (gene_biotype== 'protein_coding')
+    
+    positions=exon_positions (details2)
+    
+    bed= positions %>%
+      mutate (start=as.character (as.numeric(start)-1) ,
+              score=300, id= paste0(chrm,':',start,"-",end,'(',strand,')')) %>%
+      select (chrm, start, end, id, score, strand) %>%
+      distinct ()
+    
+    write_delim (bed, paste0(dir,'/exons.bed'), col_names =F, delim='\t')
+    
+    system2 (command='bedtools', 
+             args=c('getfasta', '-fi', ref_fasta, 
+                    '-bed', paste0(dir,'/exons.bed'),
+                    '-fo', paste0(dir,'/exons_seq'), 
+                    '-s', '-tab'))
+    
+    s= read.table(paste0(dir,'/exons_seq'))
+    colnames(s)= (c('bed_id','seq'))
+    
+    positions2= positions %>%
+      mutate (start=as.character (as.numeric(start)-1), 
+              bed_id= paste0(chrm,':', start, "-",end,'(',strand,')'),
+              start=as.character (as.numeric(start)+1)) %>%
+      left_join(s,by='bed_id') 
+    
+    exon1frames= first_exon (positions2)
+    possibleframe= filter (exon1frames, !validframe %in% c('no protein','stops+nearbyTSS'))$event_id
+    
+    diff_samples= filter (isoforms, event_id %in% possibleframe) %>%
+      mutate (grp= as.factor (group))
+    
+    all_pvals= event_level (diff_samples, details2)
+    
+    diff2= filter (all_pvals, adj_pval<q_cutoff)
+    
+    events2= diff2$event_id
+    t= filter (exon1frames, event_id %in% events2) 
+    frames= peptide_match (t, details2)
+    
+    t= filter (positions2, event_id %in% events2)
+    iso_dna= stitch_exons (t, frames)
+    protein_diff= protein_changes (iso_dna)
+    
+    positions3= filter (positions2, event_id %in% events2)
+    samples3= filter (isoforms, event_id %in% events2)
+    
+    event_names= splice_name(positions3)
+    
+    ## final data 
+    diff3= left_join(diff2, event_names,by='event_id') %>%
+      relocate (genomic_name, .after=event_id) %>%
+      left_join(protein_diff, by=c('gene_name', 'event_id')) %>%
+      mutate (frameshift= ifelse (type=='mutex_exons' & e2shift != e3shift, abs(e2shift-e3shift),
+                                  ifelse (type !='mutex_exons' & e2shift>0,e2shift,0)),
+              delta_avg= abs(avg_disease-avg_control)) 
+    
+  })
+  saveRDS(positions3, paste0(dir,'/positions.rds'))
+  saveRDS(diff3, paste0(dir,'/differential_events.rds'))
+  file.remove(paste0(dir,'/exons.bed'))
+  file.remove(paste0(dir,'/exons_seq'))
+  
+  return (diff3)
+}
+
 # input gene names in ensembl gene ID version format, 
 # function will classify them into protein coding vs not
 gene_info= function (ensembl_id_version) {
