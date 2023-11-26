@@ -8,6 +8,9 @@ RiboSplitter will:
 - Predict relative protein differences between the two isoforms of each event
 - Create 3 figures: a zoomed-in view to show details and protein changes of the event, a zoomed-out view to show the location of the event relative to the full transcript, and a figure with protein domains aligned to exons. 
 
+## Citation
+Najjar, R., Mustelin, T. Prediction of alternative pre-mRNA splicing outcomes. Sci Rep 13, 20000 (2023). https://doi.org/10.1038/s41598-023-47348-6
+
 ## Requirements
 - R (4.2.1) libraries: tidyverse (2.0.0), Biostrings (2.66.0), biomaRt (2.54.1), patchwork (1.1.3), rhdf5 (2.42.1), aod (1.3.2)
 - bedtools (2.30.0)
@@ -49,6 +52,7 @@ Input parameters
 - dir: path to save output files
 - ref_fasta: path to reference genome fasta (needed to extract exon DNA sequences)
 - q_cutoff: alpha value for q values (p values adjusted for multiple comparisons)
+- ensembl_version: Make sure this corresponds to the reference genome you use.
 
 After filtering (events that are non-coding, have low variability, or have many missing values), RiboSplitter uses a beta binomial model with overdispersion to allow for variability by group, with p values adjusted for multiple comparisons using the BH methodology.
 
@@ -61,7 +65,7 @@ de_events= ribosplitter (isoforms_df=isoforms, details_df=details,
                 min_disease=10, min_control=10, sd_cutoff=0.05,
                 dir='~/rna/sjogrenB',
                 ref_fasta='~/rna/nw/GRCh38.primary_assembly.genome.fa',
-                q_cutoff=0.05)
+                q_cutoff=0.05, ensembl_version=108)
 
 ```
 
@@ -109,7 +113,7 @@ This figure will show the gene name, splicing event ID, chromosome, strand, and 
 
 A 2nd figure can be generated as below that will zoom out and show the event parallel to its best fit transcript, so we can see the location of the splicing event. 
 ```
-f= splice_figure_ref_TX (final_df , positions3)
+f= splice_figure_ref_TX (final_df , positions3, ensembl_version=108)
 ggsave(paste0(out_dir,'/exons_ref_transcript.png'), plot=wrap_plots(f[1:30], ncol=3),
            dpi=300,units='cm', height=40, width=60)
 ```
@@ -119,7 +123,7 @@ ggsave(paste0(out_dir,'/exons_ref_transcript.png'), plot=wrap_plots(f[1:30], nco
 
 A 3rd figure aligns exons (grey) to protein domains
 ```
-domain_fig('ENSG00000064012.24')
+domain_fig('ENSG00000064012.24', ensembl_version=108)
 
 # you can also create domain figures for all genes of interest as below:
 domains_figs= domain_fig (final_df$gene_name)
