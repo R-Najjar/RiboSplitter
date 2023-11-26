@@ -1,3 +1,4 @@
+
 # RiboSplitter
 # Written by Rayan Najjar
 
@@ -24,7 +25,7 @@ read_details= function (dir) {
   t5= readspladder('mutex_exons_C3')
   t6= readspladder('mult_exon_skip_C3')
   det= bind_rows (t1,t2,t3,t4,t5,t6) 
-    details= det %>%
+  details= det %>%
     mutate (type= str_extract(event_id,'[^.]+')) %>%
     ungroup() %>%
     mutate (e1= paste(e1_start,e1_end,sep=':'), e2= paste(e2_start,e2_end,sep=':'),
@@ -90,7 +91,7 @@ read_isoforms= function (dir, prefix) {
 # wrapper function for pipeline
 # isoforms must contain a "group" variable with 2 values only: "disease" and "control"
 ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cutoff=0.05,
-                        dir, ref_fasta, q_cutoff) {
+                        dir, ref_fasta, q_cutoff, ensembl_version) {
   suppressWarnings({
     events= isoforms_df %>%
       group_by(event_id) %>%
@@ -98,7 +99,7 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
       filter (n_dis >=min_disease & n_hc >=min_control) %>%
       filter (sd >=sd_cutoff) 
     
-    g= gene_info (details_df$gene_name)
+    g= gene_info (details_df$gene_name, ensembl_version)
     details2= details_df %>%
       filter (event_id %in% events$event_id) %>%
       left_join(g, by='gene_name') %>%
@@ -130,7 +131,7 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
               start=as.character (as.numeric(start)+1)) %>%
       left_join(s,by='bed_id') 
     
-    exon1frames= first_exon (positions2)
+    exon1frames= first_exon (positions2, ensembl_version)
     possibleframe= filter (exon1frames, !validframe %in% c('no protein','stops+nearbyTSS'))$event_id
     
     diff_samples= filter (isoforms, event_id %in% possibleframe) %>%
@@ -142,7 +143,7 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
     
     events2= diff2$event_id
     t= filter (exon1frames, event_id %in% events2) 
-    frames= peptide_match (t, details2)
+    frames= peptide_match (t, details2, ensembl_version)
     
     t= filter (positions2, event_id %in% events2)
     iso_dna= stitch_exons (t, frames)
@@ -172,11 +173,11 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
 
 # input gene names in ensembl gene ID version format, 
 # function will classify them into protein coding vs not
-gene_info= function (ensembl_id_version) {
+gene_info= function (gene_ensembl_id_version, ensembl_version) {
   library (biomaRt)
-  # human genes GRCh38.p13 version 108
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
-  gg= getBM (mart=ensembl, filters='ensembl_gene_id_version', unique (ensembl_id_version), 
+  # human genes
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
+  gg= getBM (mart=ensembl, filters='ensembl_gene_id_version', unique (gene_ensembl_id_version), 
              attributes =c('ensembl_gene_id_version' ,'ensembl_gene_id','external_gene_name', 'gene_biotype'))
   gg= dplyr::rename (gg, gene_name=ensembl_gene_id_version, ensembl=ensembl_gene_id, 
                      gene_id=external_gene_name) %>%
@@ -244,7 +245,7 @@ readframes= function (dnaseq, id) {
 }
 
 # identify the correct reading frame based on first exon (in 5' to 3' direction) with a single open reading frame
-first_exon = function (exon_positions) {
+first_exon = function (exon_positions, ensembl_version) {
   library (Biostrings)
   neg= exon_positions %>%
     filter (strand=='-') %>%
@@ -272,7 +273,7 @@ first_exon = function (exon_positions) {
     left_join(fiveprime, by='event_id') %>%
     dplyr::select (gene_name, event_id,chrm, strand, start, end)
   library (biomaRt)
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
   tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', noprotein$gene_name, 
              attributes =c('ensembl_gene_id_version' , 'ensembl_transcript_id', 
                            'transcription_start_site', 'transcript_biotype') ) %>%
@@ -352,9 +353,9 @@ event_level= function (samples_df, details_df) {
 
 # function to do exact matching of first exon amino acid sequence with known proteins of the gene
 # input is data from first_exon function above and details file
-peptide_match = function (e1frames, details_df) {
+peptide_match = function (e1frames, details_df, ensembl_version) {
   library (biomaRt)
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
   frames_aa= e1frames %>%
     dplyr::select (event_id,r1,r2,r3) %>%
     pivot_longer(cols=c(r1,r2,r3), names_to = 'frame', values_to ='aa') %>%
@@ -774,9 +775,9 @@ splicing_figure= function (events_df, positions_df, samples_df, fig2) {
 
 # function to get transcript as reference for splicing event. it will be either canonical or the one that
 # matches to more exons of isoform 1 (shared exons)
-get_tx= function (events_df, iso1_df ) {
+get_tx= function (events_df, iso1_df, ensembl_version ) {
   library (biomaRt)
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
   df= dplyr::select(events_df, gene_name, gene_id, event_id)
   genes= unique (df$gene_name)
   tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', genes, 
@@ -840,7 +841,7 @@ get_tx= function (events_df, iso1_df ) {
 }
 
 # zoomed-out figure with transcript 
-splice_figure_ref_TX= function (events_df , positions_df) {
+splice_figure_ref_TX= function (events_df , positions_df, ensembl_version) {
   pos= positions_df %>%
     filter (event_id %in% events_df$event_id) %>%
     arrange (gene_name, event_id, exons, start) %>%
@@ -863,7 +864,7 @@ splice_figure_ref_TX= function (events_df , positions_df) {
     dplyr::arrange (gene_name, id, start) %>%
     group_by(event_id) %>%
     mutate (y= as.numeric (factor(iso)), event_id=as.factor(event_id)) 
-  ref2=get_tx (events_df, iso1 )
+  ref2=get_tx (events_df, iso1, ensembl_version)
   event_label= events_df  %>%
     mutate (label= paste0(gene_id,':',event_id,':',chrm,'(',strand,')')) %>%
     dplyr::select (gene_id, event_id,type,chrm,strand, label) %>%
@@ -886,10 +887,10 @@ splice_figure_ref_TX= function (events_df , positions_df) {
 }
 
 # Protein domains. input gene names in ensembl gene ID version
-get_domains= function (gene_names) {
+get_domains= function (gene_names, ensembl_version) {
   library (biomaRt)
-  # human genes GRCh38.p13 version 108
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  # human genes 
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
   tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', unique (gene_names), 
              attributes =c('ensembl_gene_id_version', 'external_gene_name' , 'ensembl_transcript_id', 'transcript_is_canonical') ) %>%
     filter (transcript_is_canonical==1)
@@ -967,9 +968,9 @@ get_domains= function (gene_names) {
 }
 
 # Process exons
-get_exons= function (gene_names) {
+get_exons= function (gene_names, ensembl_version) {
   library (biomaRt)
-  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=108)
+  ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl", version=ensembl_version)
   tx= getBM (mart=ensembl, filters='ensembl_gene_id_version', unique (gene_names), 
              attributes =c('ensembl_gene_id_version', 'external_gene_name' , 'ensembl_transcript_id', 
                            'transcript_is_canonical','chromosome_name', 'strand') ) %>%
@@ -1034,9 +1035,9 @@ get_exons= function (gene_names) {
 }
 
 # protein domain figure
-domain_fig= function (ensembl_genes) {
-  domains_df= get_domains(ensembl_genes)
-  exons_df= get_exons (ensembl_genes)
+domain_fig= function (ensembl_genes, ensembl_version ) {
+  domains_df= get_domains(ensembl_genes, ensembl_version)
+  exons_df= get_exons (ensembl_genes, ensembl_version)
   exons= exons_df %>%
     mutate (aa_start=new_start/3, aa_end=new_end/3)
   domains= domains_df %>%
