@@ -227,9 +227,9 @@ readframes= function (dnaseq, id) {
     event_id=id[i]
     dna= dnaseq[i]
     t= DNAString(dna)
-    r1= toString (translate (t), no.init.codon=T)
-    r2= toString (translate (subseq (t,2)), no.init.codon=T)
-    r3= toString (translate (subseq (t,3)), no.init.codon=T)
+    r1= toString (translate (t, no.init.codon=T, if.fuzzy.codon='solve'))
+    r2= toString (translate (subseq (t,2), no.init.codon=T, if.fuzzy.codon='solve'))
+    r3= toString (translate (subseq (t,3), no.init.codon=T, if.fuzzy.codon='solve'))
     r1= ifelse(r1=='','*',r1)
     r2= ifelse(r2=='','*',r2)
     r3= ifelse(r3=='','*',r3)
@@ -460,8 +460,8 @@ stitch_exons = function (positions_df, frames_df) {
   for (i in 1:length(t$iso1)) {
     event_id= t$event_id[i]
     f= t$frame[i]
-    iso1_aa= toString (translate (subseq (DNAString(t$iso1[i]), f ),if.fuzzy.codon='solve'), no.init.codon=T)
-    iso2_aa= toString (translate (subseq (DNAString(t$iso2[i]), f ),if.fuzzy.codon='solve'), no.init.codon=T)
+    iso1_aa= toString (translate (subseq (DNAString(t$iso1[i]), f ),if.fuzzy.codon='solve', no.init.codon=T))
+    iso2_aa= toString (translate (subseq (DNAString(t$iso2[i]), f ),if.fuzzy.codon='solve', no.init.codon=T))
     iso1_stop= str_locate (iso1_aa,"\\*")[1]
     iso2_stop= str_locate (iso2_aa,"\\*")[1]
     df= add_row(df, event_id,iso1_aa,iso2_aa,iso1_stop,iso2_stop)
