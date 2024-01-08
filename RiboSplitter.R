@@ -134,7 +134,7 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
     exon1frames= first_exon (positions2, ensembl_version)
     possibleframe= filter (exon1frames, !validframe %in% c('no protein','stops+nearbyTSS'))$event_id
     
-    diff_samples= filter (isoforms, event_id %in% possibleframe) %>%
+    diff_samples= filter (isoforms_df, event_id %in% possibleframe) %>%
       mutate (grp= as.factor (group))
     
     all_pvals= event_level (diff_samples, details2)
@@ -150,7 +150,7 @@ ribosplitter= function (isoforms_df, details_df, min_disease, min_control, sd_cu
     protein_diff= protein_changes (iso_dna)
     
     positions3= filter (positions2, event_id %in% events2)
-    samples3= filter (isoforms, event_id %in% events2)
+    samples3= filter (isoforms_df, event_id %in% events2)
     
     event_names= splice_name(positions3)
     
